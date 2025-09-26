@@ -88,8 +88,36 @@ public class PlayerController : MonoBehaviour
         Vector2 startPos = transform.position;
 
         float jumpHeight = jumpHeightInGrids * gridSize;
-        // 跳跃的水平距离现在直接使用起跳时锁定的速度
         float horizontalDistance = lockedHorizontalSpeed * jumpDuration;
+
+        // --- 新增的修复代码 ---
+        // 1. 获取玩家的碰撞体大小，为BoxCast做准备
+        BoxCollider2D playerCollider = GetComponent<BoxCollider2D>();
+        Vector2 castDirection = new Vector2(horizontalDistance, jumpHeight).normalized;
+        float castDistance = new Vector2(horizontalDistance, jumpHeight).magnitude;
+
+        // 2. 在跳跃路径上进行一次盒子投射，只检测"whatIsGround"层
+        RaycastHit2D hit = Physics2D.BoxCast(
+            startPos,                      // 盒子的起始中心点
+            playerCollider.size,           // 盒子的尺寸
+            0f,                            // 盒子的角度
+            castDirection,                 // 投射方向
+            castDistance,                  // 投射距离
+            whatIsGround                   // 只检测“地面”层（墙也属于这个层）
+        );
+
+        // 如果投射命中了物体（墙）
+        if (hit.collider != null)
+        {
+            // --- 经典蹬墙跳的修改 ---
+            // 不再是设为0，而是将水平方向反向
+            horizontalDistance = -horizontalDistance;
+            lockedHorizontalSpeed = -lockedHorizontalSpeed;
+
+            // 你甚至可以给一个额外的“蹬墙”力度
+            lockedHorizontalSpeed = -lockedHorizontalSpeed * 1.2f; // 增加20%的反向速度
+        }
+
         Vector2 targetPos = startPos + new Vector2(horizontalDistance, jumpHeight);
 
         float elapsedTime = 0f;
