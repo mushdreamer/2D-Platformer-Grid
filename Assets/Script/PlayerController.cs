@@ -115,7 +115,7 @@ public class PlayerController : MonoBehaviour
             lockedHorizontalSpeed = -lockedHorizontalSpeed;
 
             // 你甚至可以给一个额外的“蹬墙”力度
-            lockedHorizontalSpeed = -lockedHorizontalSpeed * 1.2f; // 增加20%的反向速度
+            //lockedHorizontalSpeed = -lockedHorizontalSpeed * 1.2f; // 增加20%的反向速度
         }
 
         Vector2 targetPos = startPos + new Vector2(horizontalDistance, jumpHeight);
