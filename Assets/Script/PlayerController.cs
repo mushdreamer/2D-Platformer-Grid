@@ -3,101 +3,112 @@ using UnityEngine;
 
 public class PlayerController : MonoBehaviour
 {
-    // --- 公共变量 (可以在Unity检视面板中调整) ---
+    // --- 公共变量 ---
     [Header("移动参数")]
-    public float moveSpeed = 5f; // 水平移动速度
+    public float moveSpeed = 5f;
 
     [Header("跳跃参数 (基于网格)")]
-    public float gridSize = 1f; // 每个网格单元的大小 (Unity中的1个单位)
-    public int jumpHeightInGrids = 3; // 跳跃的高度，以网格数为单位
-    public float jumpDuration = 0.3f; // 完成跳跃动画所需的时间
+    public float gridSize = 1f;
+    public int jumpHeightInGrids = 3;
+    public float jumpDuration = 0.3f;
 
     [Header("地面检测")]
-    public Transform groundCheck;     // 用于检测地面的空物体的位置
-    public float checkRadius = 0.2f;  // 检测范围的半径
-    public LayerMask whatIsGround;    // 定义哪一个图层是“地面”
+    public Transform groundCheck;
+    public float checkRadius = 0.2f;
+    public LayerMask whatIsGround;
 
     // --- 私有变量 ---
-    private Rigidbody2D rb;          // 玩家的刚体组件
-    private float moveInput;         // 水平输入 (-1 到 1)
-    private bool isGrounded;         // 玩家是否在地面上
-    private bool isJumping = false;  // 玩家是否正在执行跳跃协程
+    private Rigidbody2D rb;
+    private float moveInput;
+    private bool isGrounded;
+    private bool isJumping = false; // 这个变量现在只代表“正在执行上升协程”
+    private float lockedHorizontalSpeed; // <--- 修改: 只锁定水平速度，更清晰
 
-    // Start is called before the first frame update
     void Start()
     {
         rb = GetComponent<Rigidbody2D>();
     }
 
-    // Update is called once per frame
     void Update()
     {
-        // --- 地面检测 ---
-        // 我们将地面检测也放在Update中，以确保输入判断的及时性
         isGrounded = Physics2D.OverlapCircle(groundCheck.position, checkRadius, whatIsGround);
 
-        // --- 输入检测 ---
-        // 只有在不跳跃的时候，才接收水平输入
-        if (!isJumping)
+        // 只有在地面上且不处于跳跃上升过程中，才接收玩家的输入
+        if (isGrounded && !isJumping)
         {
             moveInput = Input.GetAxis("Horizontal");
         }
-        else
-        {
-            moveInput = 0; // 跳跃过程中禁止水平移动
-        }
 
-        // 检测跳跃输入，并且必须在地面上，且当前没有在跳跃中
+        // 只有在地面上才能起跳
         if (Input.GetButtonDown("Jump") && isGrounded && !isJumping)
         {
-            // 启动跳跃协程
+            // 在起跳的瞬间，记录下当前的水平速度
+            lockedHorizontalSpeed = moveInput * moveSpeed;
             StartCoroutine(GridJump());
         }
     }
 
-    // FixedUpdate is called at a fixed interval and is used for physics calculations
     void FixedUpdate()
     {
-        // 只有在不跳跃的时候，才应用物理移动
-        if (!isJumping)
+        // 核心逻辑修正:
+        // 1. 如果在地面上 (isGrounded)，则由玩家输入控制
+        // 2. 如果在空中 (!isGrounded)，则使用起跳时锁定的速度
+        if (isGrounded)
         {
-            rb.velocity = new Vector2(moveInput * moveSpeed, rb.velocity.y);
+            // 只有当不在上升过程中时，才应用地面移动
+            if (!isJumping)
+            {
+                rb.velocity = new Vector2(moveInput * moveSpeed, rb.velocity.y);
+            }
+        }
+        else
+        {
+            // 如果在空中 (无论是上升动画还是自由落体)
+            // 就强制保持起跳时的水平速度，让重力只影响Y轴
+            rb.velocity = new Vector2(lockedHorizontalSpeed, rb.velocity.y);
         }
     }
 
-    // --- 跳跃协程 ---
     IEnumerator GridJump()
     {
-        // 1. 标记开始跳跃
         isJumping = true;
 
-        // 2. 暂时关闭重力影响
+        // --- 上升阶段 ---
+        // 在这个阶段，我们暂时让物理引擎“靠边站”，完全手动控制位置
+
         float originalGravity = rb.gravityScale;
-        rb.gravityScale = 0f;
-        rb.velocity = Vector2.zero; // 清除所有物理速度
+        rb.gravityScale = 0f; // 关闭重力
+        rb.velocity = Vector2.zero; // 清空所有瞬时速度，防止干扰
 
-        // 3. 计算目标位置
         Vector2 startPos = transform.position;
-        float jumpHeight = jumpHeightInGrids * gridSize;
-        Vector2 targetPos = startPos + new Vector2(0, jumpHeight);
 
-        // 4. 平滑移动到目标点
+        // 计算目标位置 (同时包含水平和垂直位移)
+        float jumpHeight = jumpHeightInGrids * gridSize;
+        float horizontalDistance = lockedHorizontalSpeed * jumpDuration;
+        Vector2 targetPos = startPos + new Vector2(horizontalDistance, jumpHeight);
+
+        // 使用Lerp平滑移动到最高点
         float elapsedTime = 0f;
         while (elapsedTime < jumpDuration)
         {
-            // 使用Lerp（线性插值）平滑地将玩家从起点移动到终点
+            // 手动更新位置
             transform.position = Vector2.Lerp(startPos, targetPos, elapsedTime / jumpDuration);
             elapsedTime += Time.deltaTime;
             yield return null; // 等待下一帧
         }
 
-        // 确保最终位置精确
+        // 确保精确到达目标点
         transform.position = targetPos;
 
-        // 5. 恢复重力，让玩家自然下落
-        rb.gravityScale = originalGravity;
+        // --- 下落阶段 ---
+        // 现在，把控制权还给物理引擎
 
-        // 6. 标记跳跃结束
-        isJumping = false;
+        rb.gravityScale = originalGravity; // 恢复重力
+
+        // **关键一步**: 为下落阶段设置初始速度。
+        // 水平速度是之前锁定的速度，垂直速度为0，让它开始自然下落。
+        rb.velocity = new Vector2(lockedHorizontalSpeed, 0);
+
+        isJumping = false; // 上升协程结束
     }
 }
