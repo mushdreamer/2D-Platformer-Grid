@@ -112,7 +112,7 @@ public class PlayerController : MonoBehaviour
             // --- 经典蹬墙跳的修改 ---
             // 不再是设为0，而是将水平方向反向
             horizontalDistance = -horizontalDistance;
-            lockedHorizontalSpeed = -lockedHorizontalSpeed;
+            lockedHorizontalSpeed = -lockedHorizontalSpeed * 1.2f;
 
             // 你甚至可以给一个额外的“蹬墙”力度
             //lockedHorizontalSpeed = -lockedHorizontalSpeed * 1.2f; // 增加20%的反向速度
